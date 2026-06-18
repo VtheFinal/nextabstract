@@ -86,7 +86,7 @@ export default function Home() {
               target="_blank"
               rel="noreferrer"
             >
-              {paper.sourceName || "Open source"}
+              {formatCitation(paper)}
             </a>
           </article>
         ) : null}
@@ -101,6 +101,14 @@ function formatAuthors(authors: string[]) {
   }
 
   return `${authors.slice(0, 3).join(", ")} et al.`;
+}
+
+function formatCitation(paper: Paper) {
+  if (paper.sourceName && paper.publicationYear) {
+    return `${paper.sourceName} · ${paper.publicationYear}`;
+  }
+
+  return paper.sourceName || "Open source";
 }
 
 function isPaper(value: unknown): value is Paper {
