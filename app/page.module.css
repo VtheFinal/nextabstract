@@ -11,6 +11,7 @@
 
 .reader {
   width: min(100%, 1180px);
+  margin-inline: auto;
   display: grid;
   align-content: center;
 }
