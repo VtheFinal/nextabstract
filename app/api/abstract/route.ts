@@ -10,7 +10,10 @@ export async function GET() {
   try {
     const data = await fetchOpenAlexWorks();
     const candidates = Array.isArray(data.results)
-      ? data.results.map(normalizeWork).filter(isPaper)
+      ? data.results
+          .map(normalizeWork)
+          .filter(isPaper)
+          .filter((paper) => !containsExcludedMethodTerm(paper.abstract))
       : [];
     const paper = randomItem(candidates);
 
@@ -173,6 +176,12 @@ function randomItem<T>(items: T[]) {
 
 function isPaper(value: ReturnType<typeof normalizeWork>): value is Paper {
   return Boolean(value);
+}
+
+function containsExcludedMethodTerm(abstract: string) {
+  return /\b(p[- ]?value|confidence interval|hazard ratio|odds ratio|logistic regression|cox regression|kaplan[- ]meier|randomized controlled trial|systematic review|meta-analysis)\b/i.test(
+    abstract
+  );
 }
 
 function getString(value: unknown) {
