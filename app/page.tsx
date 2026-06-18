@@ -70,7 +70,7 @@ export default function Home() {
               {paper.sourceName ? ` / ${paper.sourceName}` : ""}
             </p>
             <h1>{paper.title}</h1>
-            <p className={styles.authors}>{paper.authors.join(", ")}</p>
+            <p className={styles.authors}>{formatAuthors(paper.authors)}</p>
             <button
               className={styles.nextButton}
               type="button"
@@ -93,6 +93,14 @@ export default function Home() {
       </section>
     </main>
   );
+}
+
+function formatAuthors(authors: string[]) {
+  if (authors.length <= 3) {
+    return authors.join(", ");
+  }
+
+  return `${authors.slice(0, 3).join(", ")} et al.`;
 }
 
 function isPaper(value: unknown): value is Paper {
