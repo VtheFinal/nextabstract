@@ -42,7 +42,7 @@
 .paper h1 {
   max-width: 28ch;
   margin: 0;
-  font-size: clamp(1.9rem, 4vw, 3.4rem);
+  font-size: clamp(1.9rem, 3.4vw, 3rem);
   font-weight: 520;
   line-height: 1.08;
   letter-spacing: 0;
@@ -58,7 +58,7 @@
 
 .abstract {
   max-width: 92ch;
-  margin: 32px 0 0;
+  margin: 26px 0 0;
   color: #e8e8e8;
   font-size: clamp(1.1rem, 2vw, 1.35rem);
   line-height: 1.9;
@@ -87,7 +87,7 @@
 .nextButton {
   display: block;
   width: min(100%, 260px);
-  margin: 28px auto 0;
+  margin: 22px auto 0;
   min-height: 54px;
   border: 1px solid #fff;
   background: #fff;
