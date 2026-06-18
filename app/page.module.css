@@ -4,7 +4,7 @@
   display: grid;
   grid-template-rows: 1fr auto;
   gap: 40px;
-  background: #000;
+  background: #05070a;
   color: #fff;
   font-family: Georgia, Cambria, "Times New Roman", Times, serif;
 }
@@ -31,10 +31,12 @@
 }
 
 .meta {
-  margin: 0 0 18px;
-  color: #b8b8b8;
-  font-size: 0.9rem;
+  margin: 0 0 20px;
+  color: #8f98a3;
+  font-size: 0.78rem;
   line-height: 1.5;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .paper h1 {
@@ -57,17 +59,20 @@
 .abstract {
   max-width: 92ch;
   margin: 32px 0 0;
+  color: #e8e8e8;
   font-size: clamp(1.1rem, 2vw, 1.35rem);
-  line-height: 1.75;
+  line-height: 1.9;
 }
 
 .sourceLink {
   display: inline-flex;
-  margin-top: 34px;
-  color: #fff;
-  font-size: 0.98rem;
-  font-weight: 700;
-  text-underline-offset: 5px;
+  margin-top: 38px;
+  color: #aab3bd;
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.5;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
 }
 
 .status,
