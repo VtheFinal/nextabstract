@@ -71,6 +71,14 @@ export default function Home() {
             </p>
             <h1>{paper.title}</h1>
             <p className={styles.authors}>{paper.authors.join(", ")}</p>
+            <button
+              className={styles.nextButton}
+              type="button"
+              onClick={loadAbstract}
+              disabled={loading}
+            >
+              {loading ? "Loading..." : "Next Abstract"}
+            </button>
             <p className={styles.abstract}>{paper.abstract}</p>
             <a
               className={styles.sourceLink}
@@ -83,15 +91,6 @@ export default function Home() {
           </article>
         ) : null}
       </section>
-
-      <button
-        className={styles.nextButton}
-        type="button"
-        onClick={loadAbstract}
-        disabled={loading}
-      >
-        {loading ? "Loading..." : "Next Abstract"}
-      </button>
     </main>
   );
 }
