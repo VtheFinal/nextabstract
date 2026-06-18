@@ -9,6 +9,10 @@ type Paper = {
   authors: string[];
   publicationYear: number | null;
   sourceName: string;
+  topicName?: string;
+  topicDomain?: string;
+  topicField?: string;
+  topicSubfield?: string;
   url: string;
 };
 
@@ -126,6 +130,14 @@ function isPaper(value: unknown): value is Paper {
     (typeof paper.publicationYear === "number" ||
       paper.publicationYear === null) &&
     typeof paper.sourceName === "string" &&
+    (typeof paper.topicName === "string" ||
+      typeof paper.topicName === "undefined") &&
+    (typeof paper.topicDomain === "string" ||
+      typeof paper.topicDomain === "undefined") &&
+    (typeof paper.topicField === "string" ||
+      typeof paper.topicField === "undefined") &&
+    (typeof paper.topicSubfield === "string" ||
+      typeof paper.topicSubfield === "undefined") &&
     typeof paper.url === "string"
   );
 }

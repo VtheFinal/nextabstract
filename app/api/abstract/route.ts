@@ -5,6 +5,10 @@ export const dynamic = "force-dynamic";
 const OPENALEX_URL = "https://api.openalex.org/works";
 const RESULTS_PER_PAGE = 20;
 const MAX_RANDOM_PAGE = 500;
+const HUMANITIES_QUERY_CHANCE = 0.25;
+const GENERAL_WORK_FILTER = "language:en,has_abstract:true";
+const HUMANITIES_WORK_FILTER =
+  "language:en,has_abstract:true,primary_topic.field.id:12";
 
 export async function GET() {
   try {
@@ -15,7 +19,17 @@ export async function GET() {
           .filter(isPaper)
           .filter((paper) => !containsExcludedMethodTerm(paper.abstract))
       : [];
-    const paper = randomItem(candidates);
+    const historyCandidates = candidates.filter(isHistoryTopic);
+    const preferredCandidates = candidates.filter(
+      (paper) => isPreferredTopic(paper) && !isPsychologyTopic(paper)
+    );
+    const paper = randomItem(
+      historyCandidates.length > 0
+        ? historyCandidates
+        : preferredCandidates.length > 0
+          ? preferredCandidates
+          : candidates
+    );
 
     if (!paper) {
       return NextResponse.json(
@@ -37,7 +51,7 @@ export async function GET() {
 
 async function fetchOpenAlexWorks() {
   const params = new URLSearchParams({
-    filter: "language:en,has_abstract:true",
+    filter: getOpenAlexWorkFilter(),
     per_page: String(RESULTS_PER_PAGE),
     page: String(randomPage()),
     select: [
@@ -47,6 +61,7 @@ async function fetchOpenAlexWorks() {
       "title",
       "authorships",
       "publication_year",
+      "primary_topic",
       "primary_location",
       "locations",
       "abstract_inverted_index"
@@ -65,6 +80,12 @@ async function fetchOpenAlexWorks() {
   }
 
   return response.json();
+}
+
+function getOpenAlexWorkFilter() {
+  return Math.random() < HUMANITIES_QUERY_CHANCE
+    ? HUMANITIES_WORK_FILTER
+    : GENERAL_WORK_FILTER;
 }
 
 function randomPage() {
@@ -99,6 +120,18 @@ function normalizeWork(work: unknown) {
         ? openAlexWork.publication_year
         : null,
     sourceName: decodeHtmlEntities(getSourceName(openAlexWork)),
+    topicName: decodeHtmlEntities(
+      getString(openAlexWork.primary_topic?.display_name)
+    ),
+    topicDomain: decodeHtmlEntities(
+      getString(openAlexWork.primary_topic?.domain?.display_name)
+    ),
+    topicField: decodeHtmlEntities(
+      getString(openAlexWork.primary_topic?.field?.display_name)
+    ),
+    topicSubfield: decodeHtmlEntities(
+      getString(openAlexWork.primary_topic?.subfield?.display_name)
+    ),
     url
   };
 }
@@ -184,6 +217,59 @@ function containsExcludedMethodTerm(abstract: string) {
   );
 }
 
+function isHistoryTopic(paper: Paper) {
+  const topicText = [
+    paper.topicField,
+    paper.topicSubfield,
+    paper.topicName,
+    paper.topicDomain
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return topicText.includes("history");
+}
+
+function isPsychologyTopic(paper: Paper) {
+  const topicText = [
+    paper.topicField,
+    paper.topicSubfield,
+    paper.topicName,
+    paper.topicDomain
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return topicText.includes("psychology");
+}
+
+function isPreferredTopic(paper: Paper) {
+  const topicText = [
+    paper.topicField,
+    paper.topicSubfield,
+    paper.topicName,
+    paper.topicDomain
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return [
+    "arts",
+    "humanities",
+    "history",
+    "literature",
+    "literary",
+    "philosophy",
+    "anthropology",
+    "sociology",
+    "political science",
+    "social sciences"
+  ].some((term) => topicText.includes(term));
+}
+
 function getString(value: unknown) {
   return typeof value === "string" ? value : "";
 }
@@ -205,6 +291,7 @@ type OpenAlexWork = {
   title?: string;
   authorships?: OpenAlexAuthorship[];
   publication_year?: number;
+  primary_topic?: OpenAlexTopic | null;
   primary_location?: OpenAlexLocation | null;
   locations?: OpenAlexLocation[];
   abstract_inverted_index?: Record<string, number[]>;
@@ -216,6 +303,10 @@ type Paper = {
   authors: string[];
   publicationYear: number | null;
   sourceName: string;
+  topicName: string;
+  topicDomain: string;
+  topicField: string;
+  topicSubfield: string;
   url: string;
 };
 
@@ -229,6 +320,19 @@ type OpenAlexLocation = {
   landing_page_url?: string;
   pdf_url?: string;
   source?: {
+    display_name?: string;
+  };
+};
+
+type OpenAlexTopic = {
+  display_name?: string;
+  domain?: {
+    display_name?: string;
+  };
+  field?: {
+    display_name?: string;
+  };
+  subfield?: {
     display_name?: string;
   };
 };
