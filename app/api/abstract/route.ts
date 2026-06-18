@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 const OPENALEX_URL = "https://api.openalex.org/works";
+const RESULTS_PER_PAGE = 20;
+const MAX_RANDOM_PAGE = 500;
 
 export async function GET() {
   try {
@@ -33,7 +35,8 @@ export async function GET() {
 async function fetchOpenAlexWorks() {
   const params = new URLSearchParams({
     filter: "language:en,has_abstract:true",
-    per_page: "20",
+    per_page: String(RESULTS_PER_PAGE),
+    page: String(randomPage()),
     select: [
       "id",
       "doi",
@@ -59,6 +62,10 @@ async function fetchOpenAlexWorks() {
   }
 
   return response.json();
+}
+
+function randomPage() {
+  return Math.floor(Math.random() * MAX_RANDOM_PAGE) + 1;
 }
 
 function normalizeWork(work: unknown) {
