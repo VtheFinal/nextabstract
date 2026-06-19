@@ -6,6 +6,7 @@ const OPENALEX_URL = "https://api.openalex.org/works";
 const RESULTS_PER_PAGE = 20;
 const MAX_RANDOM_PAGE = 500;
 const MIN_ABSTRACT_WORDS = 20;
+const FILTER_DIAGNOSTICS = false;
 const HUMANITIES_QUERY_CHANCE = 0.25;
 const GENERAL_WORK_FILTER =
   "language:en,has_abstract:true,type:article|preprint|dissertation";
@@ -16,18 +17,7 @@ export async function GET() {
   try {
     const data = await fetchOpenAlexWorks();
     const candidates = Array.isArray(data.results)
-      ? data.results
-          .map(normalizeWork)
-          .filter(isPaper)
-          .filter((paper) => hasMinimumAbstractLength(paper.abstract))
-          .filter((paper) => !containsExcludedMethodTerm(paper.abstract))
-          .filter((paper) => !looksLikeTableOfContents(paper.abstract))
-          .filter((paper) => !looksLikeExtractedText(paper.title, paper.abstract))
-          .filter((paper) => !looksLikeBibliography(paper.abstract))
-          .filter((paper) => !looksLikePublisherChrome(paper.abstract))
-          .filter((paper) => !looksLikeBookReview(paper.abstract))
-          .filter((paper) => !saysAbstractUnavailable(paper.abstract))
-          .filter((paper) => !looksLikeArticleBodyExtraction(paper.abstract))
+      ? applyCandidateFilters(data.results.map(normalizeWork))
       : [];
     const historyCandidates = candidates.filter(isHistoryTopic);
     const preferredCandidates = candidates.filter(
@@ -219,6 +209,63 @@ function randomItem<T>(items: T[]) {
 
 function isPaper(value: ReturnType<typeof normalizeWork>): value is Paper {
   return Boolean(value);
+}
+
+function applyCandidateFilters(normalizedPapers: ReturnType<typeof normalizeWork>[]) {
+  const validPapers = normalizedPapers.filter(isPaper);
+  logFilterDiagnostics("isPaper", normalizedPapers.length, validPapers.length);
+
+  let candidates = validPapers;
+  candidates = applyPaperFilter("minimumAbstractLength", candidates, (paper) =>
+    hasMinimumAbstractLength(paper.abstract)
+  );
+  candidates = applyPaperFilter("excludedMethodTerms", candidates, (paper) =>
+    !containsExcludedMethodTerm(paper.abstract)
+  );
+  candidates = applyPaperFilter("tableOfContents", candidates, (paper) =>
+    !looksLikeTableOfContents(paper.abstract)
+  );
+  candidates = applyPaperFilter("extractedText", candidates, (paper) =>
+    !looksLikeExtractedText(paper.title, paper.abstract)
+  );
+  candidates = applyPaperFilter("bibliography", candidates, (paper) =>
+    !looksLikeBibliography(paper.abstract)
+  );
+  candidates = applyPaperFilter("publisherChrome", candidates, (paper) =>
+    !looksLikePublisherChrome(paper.abstract)
+  );
+  candidates = applyPaperFilter("bookReview", candidates, (paper) =>
+    !looksLikeBookReview(paper.abstract)
+  );
+  candidates = applyPaperFilter("abstractUnavailable", candidates, (paper) =>
+    !saysAbstractUnavailable(paper.abstract)
+  );
+  candidates = applyPaperFilter("articleBodyExtraction", candidates, (paper) =>
+    !looksLikeArticleBodyExtraction(paper.abstract)
+  );
+
+  return candidates;
+}
+
+function applyPaperFilter(
+  name: string,
+  candidates: Paper[],
+  keepCandidate: (paper: Paper) => boolean
+) {
+  const filteredCandidates = candidates.filter(keepCandidate);
+  logFilterDiagnostics(name, candidates.length, filteredCandidates.length);
+
+  return filteredCandidates;
+}
+
+function logFilterDiagnostics(name: string, before: number, after: number) {
+  if (!FILTER_DIAGNOSTICS) {
+    return;
+  }
+
+  console.log(
+    `[abstract filters] ${name}: removed ${before - after}, remaining ${after}`
+  );
 }
 
 function hasMinimumAbstractLength(abstract: string) {
