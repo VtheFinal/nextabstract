@@ -5,10 +5,12 @@ export const dynamic = "force-dynamic";
 const OPENALEX_URL = "https://api.openalex.org/works";
 const RESULTS_PER_PAGE = 20;
 const MAX_RANDOM_PAGE = 500;
+const MIN_ABSTRACT_WORDS = 20;
 const HUMANITIES_QUERY_CHANCE = 0.25;
-const GENERAL_WORK_FILTER = "language:en,has_abstract:true";
+const GENERAL_WORK_FILTER =
+  "language:en,has_abstract:true,type:article|preprint|dissertation";
 const HUMANITIES_WORK_FILTER =
-  "language:en,has_abstract:true,primary_topic.field.id:12";
+  "language:en,has_abstract:true,primary_topic.field.id:12,type:article|preprint|dissertation";
 
 export async function GET() {
   try {
@@ -17,7 +19,12 @@ export async function GET() {
       ? data.results
           .map(normalizeWork)
           .filter(isPaper)
+          .filter((paper) => hasMinimumAbstractLength(paper.abstract))
           .filter((paper) => !containsExcludedMethodTerm(paper.abstract))
+          .filter((paper) => !looksLikeTableOfContents(paper.abstract))
+          .filter((paper) => !looksLikeExtractedText(paper.title, paper.abstract))
+          .filter((paper) => !looksLikeBibliography(paper.abstract))
+          .filter((paper) => !looksLikePublisherChrome(paper.abstract))
       : [];
     const historyCandidates = candidates.filter(isHistoryTopic);
     const preferredCandidates = candidates.filter(
@@ -211,10 +218,70 @@ function isPaper(value: ReturnType<typeof normalizeWork>): value is Paper {
   return Boolean(value);
 }
 
+function hasMinimumAbstractLength(abstract: string) {
+  return abstract.trim().split(/\s+/).filter(Boolean).length >= MIN_ABSTRACT_WORDS;
+}
+
 function containsExcludedMethodTerm(abstract: string) {
   return /\b(p[- ]?value|confidence interval|hazard ratio|odds ratio|logistic regression|cox regression|kaplan[- ]meier|randomized controlled trial|systematic review|meta-analysis)\b/i.test(
     abstract
   );
+}
+
+function looksLikeTableOfContents(abstract: string) {
+  const numberedSectionMatches =
+    abstract.match(/\b\d+\.\s+[A-Z][^.]{2,80}\./g) || [];
+  const appendixMatches = abstract.match(/\bAppendix\s+[A-Z]\b/g) || [];
+
+  return numberedSectionMatches.length >= 4 || appendixMatches.length >= 2;
+}
+
+function looksLikeExtractedText(title: string, abstract: string) {
+  const normalizedTitle = title.toLowerCase().replace(/\s+/g, " ").trim();
+  const normalizedAbstract = abstract.toLowerCase().replace(/\s+/g, " ").trim();
+  const trimmedAbstract = abstract.trim();
+  const titleWords = normalizedTitle.split(" ").filter(Boolean);
+  const substantialTitlePhrase = titleWords.slice(0, 8).join(" ");
+  const citationSignals =
+    /\b(volume|issue|pages?|public opinion quarterly|journal|quarterly|;)\b/i.test(
+      abstract
+    ) || /\b\d+[-–]\d+\b/.test(abstract);
+
+  return (
+    (normalizedTitle.length > 20 &&
+      normalizedAbstract.startsWith(normalizedTitle.slice(0, 60))) ||
+    (titleWords.length >= 6 &&
+      substantialTitlePhrase.length > 30 &&
+      normalizedAbstract.includes(substantialTitlePhrase)) ||
+    (titleWords.length >= 3 &&
+      normalizedTitle.length > 15 &&
+      normalizedAbstract.includes(normalizedTitle) &&
+      citationSignals) ||
+    /^(by|edited by|reviewed by)\b/i.test(trimmedAbstract)
+  );
+}
+
+function looksLikeBibliography(abstract: string) {
+  const numberedCitationMatches = abstract.match(/\b\d{1,3}\.\s+[A-Z][^.]+/g) || [];
+  const journalCitationMatches =
+    abstract.match(/\b[A-Z][A-Za-z&.,' -]+,\s*\d{1,4},\s*\d{1,5}[-–]\d{1,5}\s*\(\d{4}\)/g) || [];
+  const authorYearMatches =
+    abstract.match(/\b[A-Z][a-z]+,\s+[A-Z](?:\\.\\s*)+(?:\([12]\d{3}\)|[12]\d{3})/g) || [];
+
+  return (
+    numberedCitationMatches.length >= 5 ||
+    journalCitationMatches.length >= 3 ||
+    authorYearMatches.length >= 5
+  );
+}
+
+function looksLikePublisherChrome(abstract: string) {
+  const chromeMatches =
+    abstract.match(
+      /\b(search for other works by this author|share facebook twitter linkedin|download citation file|download citation|zotero|mendeley|endnote|refworks|bibtex|search advanced search|pdf first page preview|you do not currently have access to this content|permissions|cite icon|share icon|advertisement|return to issue|prev article next|cite this|publication date|publication history|published online|request reuse permissions|article views|altmetric|learn about these metrics|pubs\.acs\.org)\b/gi
+    ) || [];
+
+  return chromeMatches.length >= 3;
 }
 
 function isHistoryTopic(paper: Paper) {
