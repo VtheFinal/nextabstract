@@ -25,6 +25,9 @@ export async function GET() {
           .filter((paper) => !looksLikeExtractedText(paper.title, paper.abstract))
           .filter((paper) => !looksLikeBibliography(paper.abstract))
           .filter((paper) => !looksLikePublisherChrome(paper.abstract))
+          .filter((paper) => !looksLikeBookReview(paper.abstract))
+          .filter((paper) => !saysAbstractUnavailable(paper.abstract))
+          .filter((paper) => !looksLikeArticleBodyExtraction(paper.abstract))
       : [];
     const historyCandidates = candidates.filter(isHistoryTopic);
     const preferredCandidates = candidates.filter(
@@ -230,22 +233,49 @@ function containsExcludedMethodTerm(abstract: string) {
 
 function looksLikeTableOfContents(abstract: string) {
   const numberedSectionMatches =
-    abstract.match(/\b\d+\.\s+[A-Z][^.]{2,80}\./g) || [];
+    abstract.match(/\b\d+\.\s+[A-Z][^\n.]{2,100}/g) || [];
   const appendixMatches = abstract.match(/\bAppendix\s+[A-Z]\b/g) || [];
+  const partMatches =
+    abstract.match(
+      /\bPart\s+(?:[IVXLC]+|one|two|three|four|five|six|seven|eight|nine|ten)\b/gi
+    ) || [];
+  const tocSignalMatches =
+    abstract.match(/\b(Preface|Index|Notes and references|Abbreviations)\b/gi) || [];
+  const hasPreface = /\bPreface\b/i.test(abstract);
 
-  return numberedSectionMatches.length >= 4 || appendixMatches.length >= 2;
+  return (
+    numberedSectionMatches.length >= 4 ||
+    appendixMatches.length >= 2 ||
+    (numberedSectionMatches.length >= 3 &&
+      (partMatches.length >= 2 || hasPreface)) ||
+    (partMatches.length >= 3 && tocSignalMatches.length >= 2)
+  );
 }
 
 function looksLikeExtractedText(title: string, abstract: string) {
   const normalizedTitle = title.toLowerCase().replace(/\s+/g, " ").trim();
   const normalizedAbstract = abstract.toLowerCase().replace(/\s+/g, " ").trim();
   const trimmedAbstract = abstract.trim();
+  const plainTitle = normalizedTitle
+    .replace(/<[^>]+>/g, " ")
+    .replace(/^[ivxlcdm]+\.\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const plainAbstract = normalizedAbstract
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   const titleWords = normalizedTitle.split(" ").filter(Boolean);
   const substantialTitlePhrase = titleWords.slice(0, 8).join(" ");
   const citationSignals =
     /\b(volume|issue|pages?|public opinion quarterly|journal|quarterly|;)\b/i.test(
       abstract
     ) || /\b\d+[-–]\d+\b/.test(abstract);
+  const singleCitationSignals =
+    /^\(?[12]\d{3}\)?\./.test(trimmedAbstract) &&
+    /\bVol\.\s*\d+/i.test(abstract) &&
+    /\bNo\.\s*\d+/i.test(abstract) &&
+    /\bpp\.\s*\d+/i.test(abstract);
 
   return (
     (normalizedTitle.length > 20 &&
@@ -257,6 +287,9 @@ function looksLikeExtractedText(title: string, abstract: string) {
       normalizedTitle.length > 15 &&
       normalizedAbstract.includes(normalizedTitle) &&
       citationSignals) ||
+    (plainTitle.length > 25 &&
+      plainAbstract.includes(plainTitle.slice(0, 60)) &&
+      singleCitationSignals) ||
     /^(by|edited by|reviewed by)\b/i.test(trimmedAbstract)
   );
 }
@@ -278,10 +311,33 @@ function looksLikeBibliography(abstract: string) {
 function looksLikePublisherChrome(abstract: string) {
   const chromeMatches =
     abstract.match(
-      /\b(search for other works by this author|share facebook twitter linkedin|download citation file|download citation|zotero|mendeley|endnote|refworks|bibtex|search advanced search|pdf first page preview|you do not currently have access to this content|permissions|cite icon|share icon|advertisement|return to issue|prev article next|cite this|publication date|publication history|published online|request reuse permissions|article views|altmetric|learn about these metrics|pubs\.acs\.org)\b/gi
+      /\b(search for other works by this author|share facebook twitter linkedin|download citation file|download citation|zotero|mendeley|endnote|refworks|bibtex|search advanced search|pdf first page preview|you do not currently have access to this content|permissions|cite icon|share icon|advertisement|return to issue|prev article next|cite this|publication date|publication history|published online|request reuse permissions|article views|altmetric|learn about these metrics|pubs\.acs\.org|get access|google scholar|oxford academic|published:)\b/gi
     ) || [];
 
   return chromeMatches.length >= 3;
+}
+
+function looksLikeBookReview(abstract: string) {
+  const reviewSignals =
+    abstract.match(
+      /\b(this book|the book|the author|the authors|chapters?|chapter one|edition|volume|pages?|soft cover|hardcover|isbn|bibliographic data|audience|well-written|puzzling book)\b/gi
+    ) || [];
+
+  return reviewSignals.length >= 3;
+}
+
+function saysAbstractUnavailable(abstract: string) {
+  return /\b(abstract is not available|abstract is unavailable|no abstract is available|preview has been provided|preview is provided|content preview)\b/i.test(
+    abstract
+  );
+}
+
+function looksLikeArticleBodyExtraction(abstract: string) {
+  return (
+    /\bfootnotes continued on next page\b/i.test(abstract) ||
+    /<\/?h[1-4]\b[^>]*>/i.test(abstract) ||
+    /^<h[1-4]\b[^>]*>\s*Introduction\s*<\/h[1-4]>/i.test(abstract.trim())
+  );
 }
 
 function isHistoryTopic(paper: Paper) {
