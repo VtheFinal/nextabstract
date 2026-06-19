@@ -8,10 +8,13 @@ const MAX_RANDOM_PAGE = 500;
 const MIN_ABSTRACT_WORDS = 20;
 const FILTER_DIAGNOSTICS = false;
 const HUMANITIES_QUERY_CHANCE = 0.25;
+const SPACE_QUERY_CHANCE = 0.1;
 const GENERAL_WORK_FILTER =
   "language:en,has_abstract:true,type:article|preprint|dissertation";
 const HUMANITIES_WORK_FILTER =
   "language:en,has_abstract:true,primary_topic.field.id:12,type:article|preprint|dissertation";
+const SPACE_WORK_FILTER =
+  "language:en,has_abstract:true,type:article|preprint|dissertation,primary_topic.id:T10039|T10095|T10325|T10406|T10477|T12788|T10026";
 
 export async function GET() {
   try {
@@ -83,9 +86,17 @@ async function fetchOpenAlexWorks() {
 }
 
 function getOpenAlexWorkFilter() {
-  return Math.random() < HUMANITIES_QUERY_CHANCE
-    ? HUMANITIES_WORK_FILTER
-    : GENERAL_WORK_FILTER;
+  const queryMode = Math.random();
+
+  if (queryMode < HUMANITIES_QUERY_CHANCE) {
+    return HUMANITIES_WORK_FILTER;
+  }
+
+  if (queryMode < HUMANITIES_QUERY_CHANCE + SPACE_QUERY_CHANCE) {
+    return SPACE_WORK_FILTER;
+  }
+
+  return GENERAL_WORK_FILTER;
 }
 
 function randomPage() {
@@ -391,8 +402,7 @@ function isHistoryTopic(paper: Paper) {
   const topicText = [
     paper.topicField,
     paper.topicSubfield,
-    paper.topicName,
-    paper.topicDomain
+    paper.topicName
   ]
     .filter(Boolean)
     .join(" ")
