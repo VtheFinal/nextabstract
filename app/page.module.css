@@ -1,6 +1,6 @@
 .page {
   min-height: 100vh;
-  padding: 40px clamp(20px, 6vw, 80px);
+  padding: 40px clamp(20px, 6vw, 80px) 140px;
   display: grid;
   grid-template-rows: 1fr auto;
   gap: 40px;
@@ -86,6 +86,11 @@
 
 .nextButton {
   display: block;
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  z-index: 10;
   width: min(100%, 260px);
   margin: 22px auto 0;
   min-height: 54px;
@@ -105,10 +110,10 @@
 
 @media (max-width: 640px) {
   .page {
-    padding: 24px 20px;
+    padding: 24px 20px 140px;
   }
 
   .nextButton {
-    width: 100%;
+    width: calc(100% - 40px);
   }
 }
