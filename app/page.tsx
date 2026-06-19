@@ -38,6 +38,7 @@ export default function Home() {
       }
 
       setPaper(data);
+      window.scrollTo({ top: 0 });
     } catch (caughtError) {
       setPaper(null);
       setError(
