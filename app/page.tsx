@@ -20,6 +20,7 @@ export default function Home() {
   const [paper, setPaper] = useState<Paper | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const loadAbstract = useCallback(async () => {
     setLoading(true);
@@ -38,6 +39,7 @@ export default function Home() {
       }
 
       setPaper(data);
+      setCopied(false);
       window.scrollTo({ top: 0 });
     } catch (caughtError) {
       setPaper(null);
@@ -130,6 +132,13 @@ export default function Home() {
             >
               {formatCitation(paper)}
             </a>
+            <button
+              className={styles.copyButton}
+              type="button"
+              onClick={() => copyCitation(paper, setCopied)}
+            >
+              {copied ? "Copied" : "Copy citation"}
+            </button>
           </article>
         ) : null}
       </section>
@@ -151,6 +160,26 @@ function formatCitation(paper: Paper) {
   }
 
   return paper.sourceName || "Open source";
+}
+
+async function copyCitation(
+  paper: Paper,
+  setCopied: (copied: boolean) => void
+) {
+  const citationParts = [
+    paper.title,
+    formatAuthors(paper.authors),
+    paper.sourceName,
+    paper.publicationYear,
+    paper.url
+  ].filter(Boolean);
+
+  await navigator.clipboard.writeText(citationParts.join(". "));
+  setCopied(true);
+
+  window.setTimeout(() => {
+    setCopied(false);
+  }, 1800);
 }
 
 function isPaper(value: unknown): value is Paper {
