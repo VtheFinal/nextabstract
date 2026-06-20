@@ -303,6 +303,7 @@ function looksLikeTableOfContents(abstract: string) {
   const numberedSectionMatches =
     abstract.match(/\b\d+\.\s+[A-Z][^\n.]{2,100}/g) || [];
   const numberedHeadingMarkers = abstract.match(/\b\d+\.\s+[A-Z]/g) || [];
+  const dotHyphenSeparators = abstract.match(/\.-\s+[A-Z]/g) || [];
   const appendixMatches = abstract.match(/\bAppendix\s+[A-Z]\b/g) || [];
   const partMatches =
     abstract.match(
@@ -318,6 +319,7 @@ function looksLikeTableOfContents(abstract: string) {
 
   return (
     numberedSectionMatches.length >= 4 ||
+    dotHyphenSeparators.length >= 5 ||
     (numberedHeadingMarkers.length >= 4 &&
       expandedTocSignalMatches.length >= 2) ||
     appendixMatches.length >= 2 ||
