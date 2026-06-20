@@ -55,6 +55,33 @@ export default function Home() {
     void loadAbstract();
   }, [loadAbstract]);
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target;
+      const isInteractiveElement =
+        target instanceof HTMLElement &&
+        ["A", "BUTTON", "INPUT", "SELECT", "TEXTAREA"].includes(target.tagName);
+      const isNextShortcut =
+        event.key.toLowerCase() === "n" || event.key === " ";
+
+      if (loading || isInteractiveElement || !isNextShortcut) {
+        return;
+      }
+
+      if (event.key === " ") {
+        event.preventDefault();
+      }
+
+      void loadAbstract();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [loadAbstract, loading]);
+
   return (
     <main className={styles.page}>
       <section className={styles.reader} aria-live="polite">
@@ -80,6 +107,7 @@ export default function Home() {
                 href={paper.url}
                 target="_blank"
                 rel="noreferrer"
+                onClick={(event) => event.currentTarget.blur()}
               >
                 {paper.title}
               </a>
