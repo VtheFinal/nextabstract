@@ -290,7 +290,7 @@ function hasMinimumAbstractLength(abstract: string) {
 }
 
 function isExcludedSource(sourceName: string) {
-  return EXCLUDED_SOURCE_NAMES.includes(sourceName.toLowerCase());
+  return /\beugenics\b/i.test(sourceName);
 }
 
 function containsExcludedMethodTerm(abstract: string) {
