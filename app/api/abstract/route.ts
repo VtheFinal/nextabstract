@@ -438,8 +438,7 @@ function isPsychologyTopic(paper: Paper) {
   const topicText = [
     paper.topicField,
     paper.topicSubfield,
-    paper.topicName,
-    paper.topicDomain
+    paper.topicName
   ]
     .filter(Boolean)
     .join(" ")
@@ -452,8 +451,7 @@ function isPreferredTopic(paper: Paper) {
   const topicText = [
     paper.topicField,
     paper.topicSubfield,
-    paper.topicName,
-    paper.topicDomain
+    paper.topicName
   ]
     .filter(Boolean)
     .join(" ")
