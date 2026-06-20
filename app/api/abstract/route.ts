@@ -9,6 +9,9 @@ const MIN_ABSTRACT_WORDS = 20;
 const FILTER_DIAGNOSTICS = false;
 const HUMANITIES_QUERY_CHANCE = 0.25;
 const SPACE_QUERY_CHANCE = 0.1;
+const EXCLUDED_SOURCE_NAMES = [
+  "the annals of eugenics",
+];
 const GENERAL_WORK_FILTER =
   "language:en,has_abstract:true,type:article|preprint|dissertation";
 const HUMANITIES_WORK_FILTER =
@@ -230,6 +233,9 @@ function applyCandidateFilters(normalizedPapers: ReturnType<typeof normalizeWork
   candidates = applyPaperFilter("minimumAbstractLength", candidates, (paper) =>
     hasMinimumAbstractLength(paper.abstract)
   );
+  candidates = applyPaperFilter("excludedSource", candidates, (paper) =>
+    !isExcludedSource(paper.sourceName)
+  );
   candidates = applyPaperFilter("excludedMethodTerms", candidates, (paper) =>
     !containsExcludedMethodTerm(paper.abstract)
   );
@@ -246,7 +252,7 @@ function applyCandidateFilters(normalizedPapers: ReturnType<typeof normalizeWork
     !looksLikePublisherChrome(paper.abstract)
   );
   candidates = applyPaperFilter("bookReview", candidates, (paper) =>
-    !looksLikeBookReview(paper.abstract)
+    !looksLikeBookReview(paper.abstract, paper.sourceName)
   );
   candidates = applyPaperFilter("abstractUnavailable", candidates, (paper) =>
     !saysAbstractUnavailable(paper.abstract)
@@ -283,6 +289,10 @@ function hasMinimumAbstractLength(abstract: string) {
   return abstract.trim().split(/\s+/).filter(Boolean).length >= MIN_ABSTRACT_WORDS;
 }
 
+function isExcludedSource(sourceName: string) {
+  return EXCLUDED_SOURCE_NAMES.includes(sourceName.toLowerCase());
+}
+
 function containsExcludedMethodTerm(abstract: string) {
   return /\b(p[- ]?value|confidence interval|hazard ratio|odds ratio|logistic regression|cox regression|kaplan[- ]meier|randomized controlled trial|systematic review|meta-analysis)\b/i.test(
     abstract
@@ -292,6 +302,7 @@ function containsExcludedMethodTerm(abstract: string) {
 function looksLikeTableOfContents(abstract: string) {
   const numberedSectionMatches =
     abstract.match(/\b\d+\.\s+[A-Z][^\n.]{2,100}/g) || [];
+  const numberedHeadingMarkers = abstract.match(/\b\d+\.\s+[A-Z]/g) || [];
   const appendixMatches = abstract.match(/\bAppendix\s+[A-Z]\b/g) || [];
   const partMatches =
     abstract.match(
@@ -299,10 +310,16 @@ function looksLikeTableOfContents(abstract: string) {
     ) || [];
   const tocSignalMatches =
     abstract.match(/\b(Preface|Index|Notes and references|Abbreviations)\b/gi) || [];
+  const expandedTocSignalMatches =
+    abstract.match(
+      /\b(Acknowledgments|Appendix|Notes|Bibliography|Index)\b/gi
+    ) || [];
   const hasPreface = /\bPreface\b/i.test(abstract);
 
   return (
     numberedSectionMatches.length >= 4 ||
+    (numberedHeadingMarkers.length >= 4 &&
+      expandedTocSignalMatches.length >= 2) ||
     appendixMatches.length >= 2 ||
     (numberedSectionMatches.length >= 3 &&
       (partMatches.length >= 2 || hasPreface)) ||
@@ -375,7 +392,11 @@ function looksLikePublisherChrome(abstract: string) {
   return chromeMatches.length >= 3;
 }
 
-function looksLikeBookReview(abstract: string) {
+function looksLikeBookReview(abstract: string, sourceName: string) {
+  if (sourceName.toLowerCase().includes("choice reviews online")) {
+    return true;
+  }
+
   const reviewSignals =
     abstract.match(
       /\b(this book|the book|the author|the authors|chapters?|chapter one|edition|volume|pages?|soft cover|hardcover|isbn|bibliographic data|audience|well-written|puzzling book)\b/gi
