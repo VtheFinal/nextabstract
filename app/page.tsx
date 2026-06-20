@@ -99,6 +99,12 @@ export default function Home() {
 
         {paper ? (
           <article className={styles.paper}>
+            <header className={styles.siteHeader}>
+              <p className={styles.siteTitle}>NEXT ABSTRACT</p>
+              <p className={styles.tagline}>
+                Randomly selected from millions of scholarly abstracts.
+              </p>
+            </header>
             <p className={styles.meta}>
               {paper.publicationYear ?? "Year unknown"}
               {paper.sourceName ? ` / ${paper.sourceName}` : ""}
