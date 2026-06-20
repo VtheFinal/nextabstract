@@ -58,7 +58,7 @@ export default function Home() {
   return (
     <main className={styles.page}>
       <section className={styles.reader} aria-live="polite">
-        {loading ? (
+        {loading && !paper ? (
           <p className={styles.status}>Loading abstract...</p>
         ) : null}
 
@@ -68,7 +68,7 @@ export default function Home() {
           </div>
         ) : null}
 
-        {!loading && paper ? (
+        {paper ? (
           <article className={styles.paper}>
             <p className={styles.meta}>
               {paper.publicationYear ?? "Year unknown"}
