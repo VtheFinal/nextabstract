@@ -74,7 +74,16 @@ export default function Home() {
               {paper.publicationYear ?? "Year unknown"}
               {paper.sourceName ? ` / ${paper.sourceName}` : ""}
             </p>
-            <h1>{paper.title}</h1>
+            <h1>
+              <a
+                className={styles.titleLink}
+                href={paper.url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {paper.title}
+              </a>
+            </h1>
             <p className={styles.authors}>{formatAuthors(paper.authors)}</p>
             <button
               className={styles.nextButton}

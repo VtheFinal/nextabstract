@@ -49,6 +49,18 @@
   overflow-wrap: anywhere;
 }
 
+.titleLink {
+  color: inherit;
+  text-decoration: none;
+}
+
+.titleLink:hover,
+.titleLink:focus-visible {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 6px;
+}
+
 .authors {
   max-width: 68ch;
   margin: 28px 0 0;
