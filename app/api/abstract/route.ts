@@ -19,14 +19,20 @@ const HUMANITIES_WORK_FILTER =
 const SPACE_WORK_FILTER =
   "language:en,has_abstract:true,type:article|preprint|dissertation,primary_topic.id:T10039|T10095|T10325|T10406|T10477|T12788|T10026";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const data = await fetchOpenAlexWorks();
     const candidates = Array.isArray(data.results)
       ? applyCandidateFilters(data.results.map(normalizeWork))
       : [];
-    const historyCandidates = candidates.filter(isHistoryTopic);
-    const preferredCandidates = candidates.filter(
+    const recentKeys = getRecentKeys(request);
+    const candidatesWithoutRecent = recentKeys.size > 0
+      ? candidates.filter((paper) => !recentKeys.has(getPaperKey(paper)))
+      : candidates;
+    const selectionCandidates =
+      candidatesWithoutRecent.length > 0 ? candidatesWithoutRecent : candidates;
+    const historyCandidates = selectionCandidates.filter(isHistoryTopic);
+    const preferredCandidates = selectionCandidates.filter(
       (paper) => isPreferredTopic(paper) && !isPsychologyTopic(paper)
     );
     const paper = randomItem(
@@ -34,7 +40,7 @@ export async function GET() {
         ? historyCandidates
         : preferredCandidates.length > 0
           ? preferredCandidates
-          : candidates
+          : selectionCandidates
     );
 
     if (!paper) {
@@ -219,6 +225,47 @@ function getPaperUrl(work: OpenAlexWork) {
 
 function randomItem<T>(items: T[]) {
   return items[Math.floor(Math.random() * items.length)] || null;
+}
+
+function getRecentKeys(request: Request) {
+  try {
+    const recentParam = new URL(request.url).searchParams.get("recent");
+
+    if (!recentParam) {
+      return new Set<string>();
+    }
+
+    const parsedKeys = JSON.parse(recentParam);
+
+    if (!Array.isArray(parsedKeys)) {
+      return new Set<string>();
+    }
+
+    return new Set(
+      parsedKeys
+        .filter((key): key is string => typeof key === "string")
+        .map((key) => key.trim().toLowerCase())
+        .filter(Boolean)
+        .slice(0, 50)
+    );
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function getPaperKey(paper: Paper) {
+  if (paper.url.trim()) {
+    return `url:${paper.url.trim().toLowerCase()}`;
+  }
+
+  return [
+    "metadata",
+    paper.title,
+    paper.publicationYear ?? "unknown-year",
+    paper.sourceName || "unknown-source"
+  ]
+    .join(":")
+    .toLowerCase();
 }
 
 function isPaper(value: ReturnType<typeof normalizeWork>): value is Paper {

@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import styles from "./page.module.css";
 
+const RECENT_ABSTRACT_KEYS_STORAGE_KEY = "next-abstract-recent-keys";
+const MAX_RECENT_ABSTRACT_KEYS = 50;
+
 type Paper = {
   title: string;
   abstract: string;
@@ -27,7 +30,17 @@ export default function Home() {
     setError("");
 
     try {
-      const response = await fetch("/api/abstract", { cache: "no-store" });
+      const recentKeys = getRecentAbstractKeys();
+      const params = new URLSearchParams();
+
+      if (recentKeys.length > 0) {
+        params.set("recent", JSON.stringify(recentKeys));
+      }
+
+      const response = await fetch(
+        `/api/abstract${params.size > 0 ? `?${params.toString()}` : ""}`,
+        { cache: "no-store" }
+      );
       const data = await response.json();
 
       if (!response.ok) {
@@ -39,6 +52,7 @@ export default function Home() {
       }
 
       setPaper(data);
+      rememberAbstractKey(getPaperKey(data));
       setCopied(false);
       window.scrollTo({ top: 0 });
     } catch (caughtError) {
@@ -166,6 +180,53 @@ function formatCitation(paper: Paper) {
   }
 
   return paper.sourceName || "Open source";
+}
+
+function getPaperKey(paper: Paper) {
+  if (paper.url.trim()) {
+    return `url:${paper.url.trim().toLowerCase()}`;
+  }
+
+  return [
+    "metadata",
+    paper.title,
+    paper.publicationYear ?? "unknown-year",
+    paper.sourceName || "unknown-source"
+  ]
+    .join(":")
+    .toLowerCase();
+}
+
+function getRecentAbstractKeys() {
+  try {
+    const storedKeys = window.sessionStorage.getItem(
+      RECENT_ABSTRACT_KEYS_STORAGE_KEY
+    );
+    const parsedKeys = storedKeys ? JSON.parse(storedKeys) : [];
+
+    return Array.isArray(parsedKeys)
+      ? parsedKeys.filter((key): key is string => typeof key === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberAbstractKey(key: string) {
+  try {
+    const recentKeys = getRecentAbstractKeys();
+    const updatedKeys = [
+      key,
+      ...recentKeys.filter((recentKey) => recentKey !== key)
+    ].slice(0, MAX_RECENT_ABSTRACT_KEYS);
+
+    window.sessionStorage.setItem(
+      RECENT_ABSTRACT_KEYS_STORAGE_KEY,
+      JSON.stringify(updatedKeys)
+    );
+  } catch {
+    // Ignore storage failures so abstract loading keeps working.
+  }
 }
 
 async function copyCitation(
