@@ -79,6 +79,11 @@ async function fetchOpenAlexWorks() {
       "abstract_inverted_index"
     ].join(",")
   });
+  const openAlexApiKey = process.env.OPENALEX_API_KEY;
+
+  if (openAlexApiKey) {
+    params.set("api_key", openAlexApiKey);
+  }
 
   const response = await fetch(`${OPENALEX_URL}?${params.toString()}`, {
     headers: {

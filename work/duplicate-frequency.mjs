@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 const API_URL = process.env.NEXT_ABSTRACT_API_URL || "http://localhost:3000/api/abstract";
 const TRIAL_COUNT = 5;
 const MAX_LOADS_PER_TRIAL = 200;
+const REQUEST_DELAY_MS = Number(process.env.DIAGNOSTIC_REQUEST_DELAY_MS || 1000);
 const OUTPUT_DIR = "outputs";
 const RAW_OUTPUT_PATH = `${OUTPUT_DIR}/duplicate-frequency-results.json`;
 const REPORT_OUTPUT_PATH = `${OUTPUT_DIR}/duplicate-frequency-report.md`;
@@ -15,6 +16,7 @@ let totalFailedApiCalls = 0;
 
 for (let trialNumber = 1; trialNumber <= TRIAL_COUNT; trialNumber += 1) {
   const seen = new Map();
+  let recentKeys = [];
   const trial = {
     trialNumber,
     duplicateLoadNumber: 0,
@@ -29,7 +31,8 @@ for (let trialNumber = 1; trialNumber <= TRIAL_COUNT; trialNumber += 1) {
       `Trial ${trialNumber}/${TRIAL_COUNT}, load ${loadNumber}/${MAX_LOADS_PER_TRIAL}...\r`
     );
 
-    const result = await fetchPaper(loadNumber);
+    const result = await fetchPaper(loadNumber, recentKeys);
+    await sleep(REQUEST_DELAY_MS);
 
     if (!result.ok) {
       trial.failedApiCalls += 1;
@@ -43,6 +46,7 @@ for (let trialNumber = 1; trialNumber <= TRIAL_COUNT; trialNumber += 1) {
 
     const key = getDuplicateKey(result.paper);
     const previous = seen.get(key);
+    recentKeys = rememberRecentKey(recentKeys, key);
 
     if (previous) {
       trial.duplicateLoadNumber = loadNumber;
@@ -86,9 +90,16 @@ await writeFile(REPORT_OUTPUT_PATH, buildReport(rawOutput));
 console.log(`Saved raw results to ${RAW_OUTPUT_PATH}`);
 console.log(`Saved report to ${REPORT_OUTPUT_PATH}`);
 
-async function fetchPaper(loadNumber) {
+async function fetchPaper(loadNumber, recentKeys) {
   try {
-    const response = await fetch(API_URL, { cache: "no-store" });
+    const params = new URLSearchParams();
+
+    if (recentKeys.length > 0) {
+      params.set("recent", JSON.stringify(recentKeys));
+    }
+
+    const url = `${API_URL}${params.size > 0 ? `?${params.toString()}` : ""}`;
+    const response = await fetch(url, { cache: "no-store" });
     const data = await response.json();
 
     if (!response.ok || !isPaper(data)) {
@@ -130,6 +141,13 @@ function getDuplicateKey(paper) {
   ]
     .join(":")
     .toLowerCase();
+}
+
+function rememberRecentKey(recentKeys, key) {
+  return [
+    key,
+    ...recentKeys.filter((recentKey) => recentKey !== key)
+  ].slice(0, 50);
 }
 
 function buildReport(results) {
@@ -201,6 +219,10 @@ function assessDuplicateConcern(results) {
   }
 
   return "Duplicates appeared in this sample, but not often enough here to clearly indicate a major concern.";
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isPaper(value) {

@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 
 const API_URL = process.env.NEXT_ABSTRACT_API_URL || "http://localhost:3000/api/abstract";
 const SAMPLE_COUNT = 200;
+const REQUEST_DELAY_MS = Number(process.env.DIAGNOSTIC_REQUEST_DELAY_MS || 1000);
 const OUTPUT_DIR = "outputs";
 const RAW_OUTPUT_PATH = `${OUTPUT_DIR}/abstract-selection-sample.json`;
 const REPORT_OUTPUT_PATH = `${OUTPUT_DIR}/abstract-selection-report.md`;
@@ -101,6 +102,8 @@ for (let index = 1; index <= SAMPLE_COUNT; index += 1) {
       error: error instanceof Error ? error.message : "Unknown fetch error"
     });
   }
+
+  await sleep(REQUEST_DELAY_MS);
 }
 
 process.stdout.write("\n");
@@ -276,6 +279,10 @@ function formatPaperList(papers) {
 
 function escapeMarkdownTableCell(value) {
   return String(value).replaceAll("|", "\\|");
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isPaper(value) {
