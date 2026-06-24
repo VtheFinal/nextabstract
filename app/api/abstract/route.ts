@@ -7,7 +7,7 @@ const RESULTS_PER_PAGE = 20;
 const MAX_RANDOM_PAGE = 500;
 const MIN_ABSTRACT_WORDS = 20;
 const FILTER_DIAGNOSTICS = false;
-const HUMANITIES_QUERY_CHANCE = 0.25;
+const HUMANITIES_QUERY_CHANCE = 0.40;
 const SPACE_QUERY_CHANCE = 0.1;
 const EXCLUDED_SOURCE_NAMES = [
   "the annals of eugenics",
@@ -18,6 +18,43 @@ const HUMANITIES_WORK_FILTER =
   "language:en,has_abstract:true,primary_topic.field.id:12,type:article|preprint|dissertation";
 const SPACE_WORK_FILTER =
   "language:en,has_abstract:true,type:article|preprint|dissertation,primary_topic.id:T10039|T10095|T10325|T10406|T10477|T12788|T10026";
+const CURIOSITY_POSITIVE_TERMS = [
+  "history",
+  "archaeology",
+  "archeology",
+  "anthropology",
+  "religion",
+  "theology",
+  "myth",
+  "mythology",
+  "folklore",
+  "ritual",
+  "manuscript",
+  "archive",
+  "ancient",
+  "medieval",
+  "classical",
+  "literature",
+  "philosophy",
+  "art history",
+  "cosmology"
+];
+const CURIOSITY_NEGATIVE_TERMS = [
+  "student achievement",
+  "learning outcomes",
+  "curriculum",
+  "employee performance",
+  "customer satisfaction",
+  "purchase management",
+  "knowledge management",
+  "service delivery",
+  "tourism development",
+  "neural network",
+  "transfer learning",
+  "optimization",
+  "matrix",
+  "embedding"
+];
 
 export async function GET(request: Request) {
   try {
@@ -33,15 +70,18 @@ export async function GET(request: Request) {
       candidatesWithoutRecent.length > 0 ? candidatesWithoutRecent : candidates;
     const historyCandidates = selectionCandidates.filter(isHistoryTopic);
     const preferredCandidates = selectionCandidates.filter(
-      (paper) => isPreferredTopic(paper) && !isPsychologyTopic(paper)
+      (paper) =>
+        isPreferredTopic(paper) &&
+        !isPsychologyTopic(paper) &&
+        !isLowCuriosityAppliedTopic(paper)
     );
-    const paper = randomItem(
+    const candidatePool =
       historyCandidates.length > 0
         ? historyCandidates
         : preferredCandidates.length > 0
           ? preferredCandidates
-          : selectionCandidates
-    );
+          : selectionCandidates;
+    const paper = pickCuriousRandom(candidatePool);
 
     if (!paper) {
       return NextResponse.json(
@@ -232,6 +272,61 @@ function randomItem<T>(items: T[]) {
   return items[Math.floor(Math.random() * items.length)] || null;
 }
 
+function pickCuriousRandom(candidates: Paper[]) {
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const scoredCandidates = candidates.map((paper) => ({
+    paper,
+    score: getCuriosityScore(paper)
+  }));
+  const highestScore = Math.max(
+    ...scoredCandidates.map((candidate) => candidate.score)
+  );
+  const highestScoringCandidates = scoredCandidates
+    .filter((candidate) => candidate.score === highestScore)
+    .map((candidate) => candidate.paper);
+
+  if (highestScoringCandidates.length >= 3) {
+    return randomItem(highestScoringCandidates);
+  }
+
+  const topCandidates = scoredCandidates
+    .sort((a, b) => b.score - a.score)
+    .slice(0, Math.min(5, scoredCandidates.length))
+    .map((candidate) => candidate.paper);
+
+  return randomItem(topCandidates);
+}
+
+function getCuriosityScore(paper: Paper) {
+  const text = [
+    paper.title,
+    paper.abstract,
+    paper.topicName,
+    paper.topicField,
+    paper.topicSubfield
+  ]
+    .join(" ")
+    .toLowerCase();
+  let score = 0;
+
+  if (matchesAny(text, CURIOSITY_POSITIVE_TERMS)) {
+    score += 1;
+  }
+
+  if (matchesAny(text, CURIOSITY_NEGATIVE_TERMS)) {
+    score -= 1;
+  }
+
+  return score;
+}
+
+function matchesAny(text: string, terms: string[]) {
+  return terms.some((term) => text.includes(term));
+}
+
 function getRecentKeys(request: Request) {
   try {
     const recentParam = new URL(request.url).searchParams.get("recent");
@@ -311,6 +406,21 @@ function applyCandidateFilters(normalizedPapers: ReturnType<typeof normalizeWork
   );
   candidates = applyPaperFilter("articleBodyExtraction", candidates, (paper) =>
     !looksLikeArticleBodyExtraction(paper.abstract)
+  );
+  candidates = applyPaperFilter("repositoryAdminFragment", candidates, (paper) =>
+    !looksLikeRepositoryAdminFragment(paper.abstract)
+  );
+  candidates = applyPaperFilter("fullTextAccessNote", candidates, (paper) =>
+    !looksLikeFullTextAccessNote(paper.abstract)
+  );
+  candidates = applyPaperFilter("interventionOutcomeStudy", candidates, (paper) =>
+    !looksLikeInterventionOutcomeStudy(paper.abstract)
+  );
+  candidates = applyPaperFilter("nonEnglishAbstractBody", candidates, (paper) =>
+    !looksLikeNonEnglishAbstractBody(paper.abstract)
+  );
+  candidates = applyPaperFilter("latexMarkupArtifact", candidates, (paper) =>
+    !looksLikeLatexMarkupArtifact(paper.abstract)
   );
 
   return candidates;
@@ -473,6 +583,91 @@ function looksLikeArticleBodyExtraction(abstract: string) {
   );
 }
 
+function looksLikeRepositoryAdminFragment(abstract: string) {
+  return /\b(submitted in partial fulfillment|complete collection|single download|record bundles|click to increase image size|click to decrease image size|helps scholars, researchers, and students discover)\b/i.test(
+    abstract
+  );
+}
+
+function looksLikeFullTextAccessNote(abstract: string) {
+  return /\b(full text of this item is not currently available|final published version may be available|available through the links above)\b/i.test(
+    abstract
+  );
+}
+
+function looksLikeInterventionOutcomeStudy(abstract: string) {
+  const interventionMatches =
+    abstract.match(
+      /\b(pre[- ]?test|post[- ]?test|control group|experimental group|quasi[- ]experimental|student achievement|learning outcomes|effectiveness of)\b/gi
+    ) || [];
+
+  return interventionMatches.length >= 2;
+}
+
+function looksLikeNonEnglishAbstractBody(abstract: string) {
+  const words = abstract
+    .toLowerCase()
+    .match(/[a-zÀ-ÖØ-öø-ÿ']+/g) || [];
+
+  if (words.length < 40) {
+    return false;
+  }
+
+  const englishFunctionWords = new Set([
+    "the",
+    "and",
+    "of",
+    "to",
+    "in",
+    "is",
+    "that",
+    "for",
+    "with",
+    "this",
+    "paper",
+    "article",
+    "study",
+    "research"
+  ]);
+  const nonEnglishFunctionWords = new Set([
+    "que",
+    "uma",
+    "para",
+    "com",
+    "não",
+    "dos",
+    "das",
+    "los",
+    "las",
+    "una",
+    "del",
+    "les",
+    "des"
+  ]);
+  const englishMatches = words.filter((word) =>
+    englishFunctionWords.has(word)
+  ).length;
+  const nonEnglishMatches = words.filter((word) =>
+    nonEnglishFunctionWords.has(word)
+  ).length;
+  const englishDensity = englishMatches / words.length;
+
+  return englishDensity < 0.03 && nonEnglishMatches >= 4;
+}
+
+function looksLikeLatexMarkupArtifact(abstract: string) {
+  if (/\\ensuremath\b/.test(abstract)) {
+    return true;
+  }
+
+  const texCommandMatches =
+    abstract.match(
+      /\\(?:frac|nabla|begin|end|mathrm|mathbf|partial|left|right)\b/g
+    ) || [];
+
+  return texCommandMatches.length >= 2;
+}
+
 function isHistoryTopic(paper: Paper) {
   const topicText = [
     paper.topicField,
@@ -499,6 +694,33 @@ function isPsychologyTopic(paper: Paper) {
   return topicText.includes("psychology");
 }
 
+function isLowCuriosityAppliedTopic(paper: Paper) {
+  const topicText = [
+    paper.topicField,
+    paper.topicSubfield,
+    paper.topicName
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return [
+    "education",
+    "curriculum",
+    "teaching",
+    "learning outcomes",
+    "student achievement",
+    "employee performance",
+    "customer satisfaction",
+    "purchase management",
+    "knowledge management",
+    "tourism development",
+    "e-government",
+    "service delivery",
+    "local government finance"
+  ].some((term) => topicText.includes(term));
+}
+
 function isPreferredTopic(paper: Paper) {
   const topicText = [
     paper.topicField,
@@ -519,7 +741,18 @@ function isPreferredTopic(paper: Paper) {
     "anthropology",
     "sociology",
     "political science",
-    "social sciences"
+    "archaeology",
+    "archeology",
+    "religion",
+    "religious studies",
+    "theology",
+    "art history",
+    "classics",
+    "classical",
+    "classical studies",
+    "folklore",
+    "mythology",
+    "linguistics"
   ].some((term) => topicText.includes(term));
 }
 
