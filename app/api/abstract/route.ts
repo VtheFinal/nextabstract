@@ -6,6 +6,9 @@ const OPENALEX_URL = "https://api.openalex.org/works";
 const RESULTS_PER_PAGE = 20;
 const MAX_RANDOM_PAGE = 500;
 const MIN_ABSTRACT_WORDS = 20;
+const RECENT_TOPIC_LIMIT = 20;
+const JOURNEY_FIELD_THRESHOLD = 6;
+const JOURNEY_FIELD_PENALTY = 1;
 const FILTER_DIAGNOSTICS = false;
 const HUMANITIES_QUERY_CHANCE = 0.40;
 const SPACE_QUERY_CHANCE = 0.1;
@@ -55,6 +58,30 @@ const CURIOSITY_NEGATIVE_TERMS = [
   "matrix",
   "embedding"
 ];
+const INVITATION_HOOK_TERMS = ["why", "how", "when", "what"];
+const INVITATION_CONCRETE_TERMS = [
+  "people",
+  "person",
+  "city",
+  "music",
+  "language",
+  "war",
+  "church",
+  "family",
+  "child",
+  "planet",
+  "star",
+  "universe",
+  "river",
+  "forest",
+  "animal",
+  "mountain",
+  "society",
+  "culture",
+  "memory",
+  "birth",
+  "death"
+];
 
 export async function GET(request: Request) {
   try {
@@ -63,6 +90,7 @@ export async function GET(request: Request) {
       ? applyCandidateFilters(data.results.map(normalizeWork))
       : [];
     const recentKeys = getRecentKeys(request);
+    const recentTopics = getRecentTopics(request);
     const candidatesWithoutRecent = recentKeys.size > 0
       ? candidates.filter((paper) => !recentKeys.has(getPaperKey(paper)))
       : candidates;
@@ -81,7 +109,7 @@ export async function GET(request: Request) {
         : preferredCandidates.length > 0
           ? preferredCandidates
           : selectionCandidates;
-    const paper = pickCuriousRandom(candidatePool);
+    const paper = pickCuriousRandom(candidatePool, recentTopics);
 
     if (!paper) {
       return NextResponse.json(
@@ -272,32 +300,31 @@ function randomItem<T>(items: T[]) {
   return items[Math.floor(Math.random() * items.length)] || null;
 }
 
-function pickCuriousRandom(candidates: Paper[]) {
+function pickCuriousRandom(candidates: Paper[], recentTopics: RecentTopic[]) {
   if (candidates.length === 0) {
     return null;
   }
 
   const scoredCandidates = candidates.map((paper) => ({
     paper,
-    score: getCuriosityScore(paper)
+    score: getJourneyAdjustedScore(paper, recentTopics)
   }));
   const highestScore = Math.max(
     ...scoredCandidates.map((candidate) => candidate.score)
   );
-  const highestScoringCandidates = scoredCandidates
-    .filter((candidate) => candidate.score === highestScore)
+  const highestScoringCandidates = scoredCandidates.filter(
+    (candidate) => candidate.score === highestScore
+  );
+  const invitingCandidates = highestScoringCandidates
+    .filter((candidate) => getInvitationScore(candidate.paper) === 1)
     .map((candidate) => candidate.paper);
 
-  if (highestScoringCandidates.length >= 3) {
-    return randomItem(highestScoringCandidates);
+  // Soft Invitation Layer tie-breaker: prefer inviting papers only within the top Journey-adjusted group.
+  if (invitingCandidates.length > 0) {
+    return randomItem(invitingCandidates);
   }
 
-  const topCandidates = scoredCandidates
-    .sort((a, b) => b.score - a.score)
-    .slice(0, Math.min(5, scoredCandidates.length))
-    .map((candidate) => candidate.paper);
-
-  return randomItem(topCandidates);
+  return randomItem(highestScoringCandidates.map((candidate) => candidate.paper));
 }
 
 function getCuriosityScore(paper: Paper) {
@@ -327,6 +354,77 @@ function matchesAny(text: string, terms: string[]) {
   return terms.some((term) => text.includes(term));
 }
 
+function getInvitationScore(paper: Paper) {
+  const openingSentence = getOpeningSentence(paper.abstract);
+
+  if (hasStronglyProceduralOpening(openingSentence)) {
+    return 0;
+  }
+
+  const titleAndOpening = `${paper.title} ${openingSentence}`.toLowerCase();
+  const titleAndAbstract = `${paper.title} ${paper.abstract}`.toLowerCase();
+
+  if (paper.title.includes("?")) {
+    return 1;
+  }
+
+  if (matchesWholeWord(titleAndOpening, INVITATION_HOOK_TERMS)) {
+    return 1;
+  }
+
+  if (matchesWholeWord(titleAndAbstract, INVITATION_CONCRETE_TERMS)) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function getOpeningSentence(text: string) {
+  const normalizedText = text.replace(/\s+/g, " ").trim();
+  const openingMatch = normalizedText.match(/^.{1,400}?[.!?](?:\s|$)/);
+
+  return openingMatch ? openingMatch[0].trim() : normalizedText.slice(0, 400);
+}
+
+function hasStronglyProceduralOpening(text: string) {
+  return /^(this paper|this study|we present|we propose|we evaluate|methods?|objective|background|results?|conclusions?)\b/i.test(
+    text.trim()
+  );
+}
+
+function matchesWholeWord(text: string, terms: string[]) {
+  return terms.some((term) =>
+    new RegExp(`\\b${escapeRegExp(term)}\\b`, "i").test(text)
+  );
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function getJourneyAdjustedScore(paper: Paper, recentTopics: RecentTopic[]) {
+  const curiosityScore = getCuriosityScore(paper);
+
+  // Soft Journey Layer nudge: reduce repeated fields without filtering them out.
+  return curiosityScore - getJourneyFieldPenalty(paper, recentTopics);
+}
+
+function getJourneyFieldPenalty(paper: Paper, recentTopics: RecentTopic[]) {
+  const topicField = paper.topicField.trim().toLowerCase();
+
+  if (!topicField) {
+    return 0;
+  }
+
+  const recentFieldCount = recentTopics.filter(
+    (topic) => topic.topicField.trim().toLowerCase() === topicField
+  ).length;
+
+  return recentFieldCount >= JOURNEY_FIELD_THRESHOLD
+    ? JOURNEY_FIELD_PENALTY
+    : 0;
+}
+
 function getRecentKeys(request: Request) {
   try {
     const recentParam = new URL(request.url).searchParams.get("recent");
@@ -351,6 +449,44 @@ function getRecentKeys(request: Request) {
   } catch {
     return new Set<string>();
   }
+}
+
+function getRecentTopics(request: Request) {
+  try {
+    const recentTopicsParam = new URL(request.url).searchParams.get("recentTopics");
+
+    if (!recentTopicsParam) {
+      return [];
+    }
+
+    const parsedTopics = JSON.parse(recentTopicsParam);
+
+    if (!Array.isArray(parsedTopics)) {
+      return [];
+    }
+
+    return parsedTopics
+      .map(normalizeRecentTopic)
+      .filter((topic): topic is RecentTopic => Boolean(topic))
+      .filter((topic) => topic.topicField.trim())
+      .slice(0, RECENT_TOPIC_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+function normalizeRecentTopic(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const topic = value as Partial<RecentTopic>;
+
+  return {
+    topicField: typeof topic.topicField === "string" ? topic.topicField : "",
+    topicSubfield:
+      typeof topic.topicSubfield === "string" ? topic.topicSubfield : ""
+  };
 }
 
 function getPaperKey(paper: Paper) {
@@ -794,6 +930,11 @@ type Paper = {
   topicField: string;
   topicSubfield: string;
   url: string;
+};
+
+type RecentTopic = {
+  topicField: string;
+  topicSubfield: string;
 };
 
 type OpenAlexAuthorship = {

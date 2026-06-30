@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import styles from "./page.module.css";
 
 const RECENT_ABSTRACT_KEYS_STORAGE_KEY = "next-abstract-recent-keys";
+const RECENT_TOPICS_STORAGE_KEY = "next-abstract-recent-topics";
 const MAX_RECENT_ABSTRACT_KEYS = 50;
+const RECENT_TOPIC_LIMIT = 20;
 
 type Paper = {
   title: string;
@@ -19,6 +21,11 @@ type Paper = {
   url: string;
 };
 
+type RecentTopic = {
+  topicField: string;
+  topicSubfield: string;
+};
+
 export default function Home() {
   const [paper, setPaper] = useState<Paper | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,10 +38,15 @@ export default function Home() {
 
     try {
       const recentKeys = getRecentAbstractKeys();
+      const recentTopics = getRecentTopics();
       const params = new URLSearchParams();
 
       if (recentKeys.length > 0) {
         params.set("recent", JSON.stringify(recentKeys));
+      }
+
+      if (recentTopics.length > 0) {
+        params.set("recentTopics", JSON.stringify(recentTopics));
       }
 
       const response = await fetch(
@@ -53,6 +65,7 @@ export default function Home() {
 
       setPaper(data);
       rememberAbstractKey(getPaperKey(data));
+      rememberRecentTopic(data);
       setCopied(false);
       window.scrollTo({ top: 0 });
     } catch (caughtError) {
@@ -227,6 +240,58 @@ function rememberAbstractKey(key: string) {
   } catch {
     // Ignore storage failures so abstract loading keeps working.
   }
+}
+
+function getRecentTopics() {
+  try {
+    const storedTopics = window.sessionStorage.getItem(
+      RECENT_TOPICS_STORAGE_KEY
+    );
+    const parsedTopics = storedTopics ? JSON.parse(storedTopics) : [];
+
+    return Array.isArray(parsedTopics)
+      ? parsedTopics
+          .map(normalizeRecentTopic)
+          .filter((topic): topic is RecentTopic => Boolean(topic))
+          .slice(0, RECENT_TOPIC_LIMIT)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberRecentTopic(paper: Paper) {
+  try {
+    const recentTopics = getRecentTopics();
+    const updatedTopics = [
+      {
+        topicField: paper.topicField || "",
+        topicSubfield: paper.topicSubfield || ""
+      },
+      ...recentTopics
+    ].slice(0, RECENT_TOPIC_LIMIT);
+
+    window.sessionStorage.setItem(
+      RECENT_TOPICS_STORAGE_KEY,
+      JSON.stringify(updatedTopics)
+    );
+  } catch {
+    // Ignore storage failures so abstract loading keeps working.
+  }
+}
+
+function normalizeRecentTopic(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const topic = value as Partial<RecentTopic>;
+
+  return {
+    topicField: typeof topic.topicField === "string" ? topic.topicField : "",
+    topicSubfield:
+      typeof topic.topicSubfield === "string" ? topic.topicSubfield : ""
+  };
 }
 
 async function copyCitation(
